@@ -1,3 +1,7 @@
+require('dotenv').config();
+
+
+const cors = require('cors');
 const express = require('express');
 
 const app = express();
@@ -5,6 +9,7 @@ const port = process.env.PORT || 3000;
 
 // Middleware to parse JSON request bodies
 app.use(express.json());
+app.use(cors());
 
 // In-memory tasks storage
 let tasks = [];
