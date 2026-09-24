@@ -1,4 +1,23 @@
 require('dotenv').config();
+const mongoose = require('mongoose');
+
+async function connectDB() {
+    const mongoUri = process.env.MONGO_URI;
+
+    if (!mongoUri) {
+        throw new Error('MONGO_URI is not defined in the environment variables');
+    }
+
+    await mongoose.connect(mongoUri);
+    console.log('Connected to MongoDB');
+}
+
+const taskSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    completed: { type: Boolean, default: false }
+}, { timestamps: true });
+
+const Task = mongoose.model('Task', taskSchema);
 
 
 const cors = require('cors');
@@ -21,66 +40,95 @@ app.get('/', (req, res) => {
 });
 
 // GET /tasks - Get all tasks
-app.get('/tasks', (req, res) => {
+app.get('/tasks', async (req, res) => {
+   try {
+    const tasks = await Task.find();
     res.json(tasks);
+   } catch (error) {
+    console.log('Error fetching tasks:', error);
+    res.status(500).json({ error: 'Internal server error' });
+   }
 });
 
 // POST /tasks - Create a new task
-app.post('/tasks', (req, res) => {
-    const { title } = req.body;
+app.post('/tasks', async (req, res) => {
+    try {
+        const { title } = req.body;
 
-    if (!title) {
-        return res.status(400).json({ error: 'Title is required' });
+        if (!title) {
+            return res.status(400).json({ error: 'Title is required' });
+        }
+
+        const task = await Task.create({ title });
+        await task.save()
+        res.status(201).json(task);
+    } catch (error) {
+        console.error('Error creating task:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-
-    const task = {
-        id: nextId++,
-        title,
-        completed: false,
-        createdAt: new Date().toISOString()
-    };
-
-    tasks.push(task);
-    res.status(201).json(task);
 });
 
 // GET /tasks/:id - Get a single task
-app.get('/tasks/:id', (req, res) => {
-    const task = tasks.find(t => t.id === parseInt(req.params.id));
+app.get('/tasks/:id', async (req, res) => {
 
-    if (!task) {
-        return res.status(404).json({ error: 'Task not found' });
+    try {
+        const task = await Task.findById(req.params.id);
+
+        if (!task) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+
+        res.json(task);
+        
+    } catch (error) {
+        console.error('Error fetching task:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 
-    res.json(task);
+    const task = tasks.find(t => t.id === parseInt(req.params.id));
+
+    
 });
 
 // PUT /tasks/:id - Update a task
-app.put('/tasks/:id', (req, res) => {
-    const task = tasks.find(t => t.id === parseInt(req.params.id));
+app.put('/tasks/:id', async (req, res) => {
+    try {
+        const { title, completed } = req.body;
 
-    if (!task) {
-        return res.status(404).json({ error: 'Task not found' });
+        const task = await Task.findByIdAndUpdate(
+            req.params.id, 
+            { title, completed }, { new: true });
+
+        if (!task) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+        res.json(task);
+    } catch (error) {
+        console.error('Error updating task:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-
-    task.title = req.body.title || task.title;
-    task.completed = req.body.completed !== undefined ? req.body.completed : task.completed;
-
-    res.json(task);
 });
 
 // DELETE /tasks/:id - Delete a task
-app.delete('/tasks/:id', (req, res) => {
-    const index = tasks.findIndex(t => t.id === parseInt(req.params.id));
+app.delete('/tasks/:id', async (req, res) => {
+    try {
+        const task = await Task.findByIdAndDelete(req.params.id);
 
-    if (index === -1) {
-        return res.status(404).json({ error: 'Task not found' });
+        if (!task) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+        res.json(task);
+    } catch (error) {
+        console.error('Error deleting task:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-
-    const deletedTask = tasks.splice(index, 1);
-    res.json(deletedTask[0]);
 });
 
-app.listen(port, () => {
-    console.log(`Server listening on http://localhost:${port}`);
-});
+connectDB().then(() => {
+    app.listen(port, () => {
+        console.log(`Server listening on http://localhost:${port}`);
+    });
+}).catch(err => {
+    console.error('Failed to connect to MongoDB', err);
+    process.exit(1);
+})
